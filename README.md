@@ -10,10 +10,10 @@ Playable directly in modern mobile and desktop browsers with zero install, no ba
 
 In **Transmute**, you step into an antique alchemical workshop. Instead of a single massive board or endless story dialogue, you operate specialized pieces of **Equipment** across multiple **Rooms**. 
 
-* **Space is the Puzzle:** Board space is tightly constrained. You must balance merging higher tiers against grinding excess clutter in the **Mortar & Pestle** to earn **Elemental Flux** — the currency that expands your grids and upgrades your equipment.
+* **Space is the Puzzle:** Board space is tightly constrained. You must balance merging higher tiers against grinding excess clutter in **The Pulverizer** to earn **Elemental Dust** — the currency that expands your grids and upgrades your equipment.
 * **The Capstone Export Rule:** Items can only leave a board once they reach their highest (capstone) tier, keeping shared storage clean and giving each board a focused purpose.
 * **No Energy / Timers:** Plan your spatial layout and merges at your own pace.
-* **Patron Orders & Masterworks:** Fulfill rotating **Patron Orders** for **Sovereigns**, discover elemental tiers in the **Grand Codex** for passive perks, and combine capstones from different rooms into **Milestone Masterworks** to unlock new wings of the workshop.
+* **Patron Orders & Masterworks:** Fulfill rotating **Patron Orders** for **Crowns**, discover elemental tiers in the **Grand Codex** for passive perks, and combine capstones from different rooms into **Milestone Masterworks** to unlock new wings of the workshop.
 * **Cross-Platform:** Seamless pointer/touch controls with local save games and JSON export/import.
 
 ---
@@ -24,9 +24,9 @@ All systems and progression mechanics have been modularized in the [`docs/`](./d
 
 | Document | Description |
 | :--- | :--- |
-| [**00. Overview & Vision**](./docs/00_OVERVIEW_AND_VISION.md) | Game pillars, core loop, 3-currency economy (Flux, Sovereigns, Insight), and AI session instructions. |
+| [**00. Overview & Vision**](./docs/00_OVERVIEW_AND_VISION.md) | Game pillars, core loop, 3-currency economy (Elemental Dust, Crowns, Insight), and AI session instructions. |
 | [**01. Rooms & Equipment**](./docs/01_ROOMS_AND_EQUIPMENT.md) | Room hierarchy, equipment boards, unlock progression, and expansion math. |
-| [**02. Materials & Merge Trees**](./docs/02_MATERIALS_AND_MERGE_TREES.md) | The elemental trees (T1–T4 primary, T5–T8 synthesis), spawner drops, and Flux yield formulas. |
+| [**02. Materials & Merge Trees**](./docs/02_MATERIALS_AND_MERGE_TREES.md) | The elemental trees (T1–T4 primary, T5–T8 synthesis), spawner drops, and Elemental Dust yield formulas. |
 | [**03. Storage & Logistics**](./docs/03_STORAGE_AND_LOGISTICS.md) | The Service Cart (transit tray), Storage Vault (long-term stackable storage), capstone validation, and UI controls. |
 | [**04. The Grand Codex & Masterworks**](./docs/04_CODEX_AND_MASTERWORKS.md) | Codex discovery perks, Patron Order system, and multi-equipment Masterworks. |
 | [**05. Technical Spec & UX**](./docs/05_TECHNICAL_SPEC_AND_UX.md) | Static web architecture, mobile/desktop wireframes, JSON save schema, and input handling. |

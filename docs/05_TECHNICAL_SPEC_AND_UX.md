@@ -32,7 +32,7 @@
 |   +---+---+---+---+                      |
 |                                          |
 +------------------------------------------+
-| [Dissolve Basin]   | [Spawn Herb (T1)]   |
+| [Pulverizer]       | [Spawn Herb (T1)]   |
 +------------------------------------------+
 | Service Cart: [Item A] [Item B] [Empty]  |
 +------------------------------------------+
@@ -42,7 +42,7 @@
 ```
 +-------------------------------------------------------------------------+
 | TRANSMUTE  | Room: [Preparation Parlor] [Distillation Annex] | Settings |
-| Currencies | Dust: 1,420 | Insight: 14 | Gold: 350          | Save/Exp |
+| Currencies | Dust: 1,420 | Insight: 14 | Crowns: 350        | Save/Exp |
 +---------------------------------------+---------------------------------+
 | ACTIVE WORKBENCH                      | SIDEBAR CONTROLS                |
 | Equipment: Herbalist's Bench (Lv 1)   |                                 |
@@ -54,7 +54,7 @@
 |   +----+----+----+----+----+          | | T3 | | T5 | |    |            |
 |   |    | *  |    | L  | L  |          | +----+ +----+ +----+            |
 |   +----+----+----+----+----+          |                                 |
-|   | L  | L  | L  | L  | L  |          | DISSOLUTION BASIN               |
+|   | L  | L  | L  | L  | L  |          | THE PULVERIZER                  |
 |   +----+----+----+----+----+          | [ Drag items here for Dust ]    |
 |                                       |                                 |
 |                                       | QUICK NAVIGATION                |
@@ -75,7 +75,7 @@
   "currencies": {
     "dust": 1420,
     "insight": 14,
-    "gold": 350
+    "crowns": 350
   },
   "serviceCart": [
     { "id": "flora_t3", "tier": 3, "family": "flora" },
