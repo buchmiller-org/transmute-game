@@ -30,6 +30,7 @@ All systems and progression mechanics have been modularized in the [`docs/`](./d
 | [**03. Storage & Logistics**](./docs/03_STORAGE_AND_LOGISTICS.md) | The Service Cart (transit tray), Storage Vault (long-term stackable storage), capstone validation, and UI controls. |
 | [**04. The Grand Codex & Masterworks**](./docs/04_CODEX_AND_MASTERWORKS.md) | Codex discovery perks, Patron Order system, and multi-equipment Masterworks. |
 | [**05. Technical Spec & UX**](./docs/05_TECHNICAL_SPEC_AND_UX.md) | Static web architecture, mobile/desktop wireframes, JSON save schema, and input handling. |
+| [**06. Phased Development**](./docs/06_PHASED_DEVELOPMENT.md) | Incremental build roadmap (7 phases), resolved design decisions (PixiJS v8, emoji placeholders, GitHub Pages), and Phase 1 implementation spec. |
 
 ---
 
