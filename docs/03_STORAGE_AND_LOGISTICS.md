@@ -86,7 +86,7 @@ On **primary boards** (Herbalist's Bench, Mortar Station, Alembic Condenser, Cal
 | 8th | 22 | 4,200 | 11,900 |
 | 9th | 24 | 6,500 | 18,400 |
 
-*Pacing note: Players will naturally need ~10 slots when Room 2 opens (Flora, Catalyst, Aqua capstones plus synthesis products), ~16 when Room 3 arrives (adding Mineral and Aether), and 20+ only for endgame Masterwork staging. The later expansions are a luxury Dust sink.*
+*Pacing note: Players will naturally need ~10 slots once the Alembic Condenser is constructed (Flora, Fungi, Salts, Pigments, and Aqua/Oils capstones plus synthesis products), ~16 once the Calcination Forge and Arcane Prism are active (adding Minerals, Carbons, Aether, and Void), and 20+ only for endgame Masterwork staging. The later expansions are a luxury Dust sink.*
 
 ### Stacking System
 
@@ -99,9 +99,9 @@ On **primary boards** (Herbalist's Bench, Mortar Station, Alembic Condenser, Cal
 | Level | Max Items Per Slot | Cost | Prerequisite |
 | :---: | :---: | :--- | :--- |
 | **Level 1** (Default) | 3 | Free | None |
-| **Level 2** | 5 | 500 Dust | Room 1 Complete |
-| **Level 3** | 10 | 1,500 Dust + 10 Insight | Room 2 Unlocked |
-| **Level 4** | 20 | 4,000 Dust + 25 Insight | Room 3 Unlocked |
+| **Level 2** | 5 | 500 Dust | Mortar Station constructed |
+| **Level 3** | 10 | 1,500 Dust + 10 Insight | Infusion Cauldron constructed |
+| **Level 4** | 20 | 4,000 Dust + 25 Insight | Arcane Prism constructed |
 
 ### Vault Management Tools
 
@@ -162,7 +162,7 @@ Patron Orders (system details in [`04_CODEX_AND_MASTERWORKS.md`](./04_CODEX_AND_
 
 * **Vault access during ordering:** The Vault drawer can be opened alongside the Orders panel, allowing the player to pull items from Vault → Cart → Order slot in a single combined view without closing panels.
 * **Auto-Match indicator:** Items in the Vault that match an active order's requirements display a small **scroll badge** on their stack, so the player can identify order-relevant reserves without memorizing recipes.
-* **Elemental Dust components:** Masterwork recipes and some high-tier orders that require Elemental Dust deduct it directly from the Alchemical Ledger (wallet). Dust is never a physical item in the Cart or Vault — it is consumed as a currency line-item when the delivery is confirmed.
+* **Elemental Dust components:** Masterwork recipes and some high-tier orders that require Elemental Dust deduct it directly from the Alchemical Ledger (wallet). Dust is never a physical item in the Cart or Vault — it is consumed as a currency line-item when the delivery is confirmed. In the Orders UI, Dust requirements appear as a separate line beneath the item slots showing the Dust cost and the player's current balance; the "Complete Delivery" button is disabled until both all item slots are filled and sufficient Dust is available.
 
 ---
 

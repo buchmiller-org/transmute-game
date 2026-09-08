@@ -14,53 +14,55 @@
 ## 2. Responsive UI Wireframes
 
 ### Mobile Portrait Layout (Phone)
-```
+```text
 +------------------------------------------+
-| [Room: Prep Parlor v]   Dust: 1,420 (D)  |
-| [Codex] [Vault] [Orders]  Insight: 14(I) |
+| [Workspace: The First Sanctum v]         |
+| Dust: 1,420 | Insight: 14 | Crowns: 350  |
 +------------------------------------------+
-| Equipment: Herbalist's Bench [Lv 1]      |
+| Equipment: Herbalist's Bench [Flora/Fung]|
 |                                          |
-|   +---+---+---+---+                      |
-|   | S |   |   |   |   S = Spawner        |
-|   +---+---+---+---+                      |
-|   |   | * | * |   |   * = Active Items   |
-|   +---+---+---+---+                      |
-|   |   | * |   | L |   L = Locked Tile    |
-|   +---+---+---+---+                      |
-|   | L | L | L | L |                      |
-|   +---+---+---+---+                      |
+|   +---+---+---+---+---+                  |
+|   | S | s |   |   |   |   S,s = Spawners |
+|   +---+---+---+---+---+                  |
+|   |   | * | * |   |   |   * = Items      |
+|   +---+---+---+---+---+                  |
+|   |   | * |   | L | L |   L = Locked     |
+|   +---+---+---+---+---+                  |
+|   | L | L | L | L | L |                  |
+|   +---+---+---+---+---+                  |
 |                                          |
 +------------------------------------------+
-| [Pulverizer]       | [Spawn Herb (T1)]   |
+| [Pulverizer]  | [Flora ▼ Lv1] [Fungi ▼ Lv2]|
 +------------------------------------------+
 | Service Cart: [Item A] [Item B] [Empty]  |
++------------------------------------------+
+| [Codex] [Blueprints] [Vault] [Orders]    |
 +------------------------------------------+
 ```
 
 ### Desktop Widescreen Layout (Computer)
-```
+```text
 +-------------------------------------------------------------------------+
-| TRANSMUTE  | Room: [Preparation Parlor] [Distillation Annex] | Settings |
-| Currencies | Dust: 1,420 | Insight: 14 | Crowns: 350        | Save/Exp |
+| TRANSMUTE  | Workspace: The First Sanctum                    | Settings |
+| Currencies | Dust: 1,420 | Insight: 14 | Crowns: 350         | Save/Exp |
 +---------------------------------------+---------------------------------+
-| ACTIVE WORKBENCH                      | SIDEBAR CONTROLS                |
-| Equipment: Herbalist's Bench (Lv 1)   |                                 |
-|                                       | [Spawner: Herb Planter]         |
-|   +----+----+----+----+----+          | Tap to produce Tier 1 Seed      |
-|   | S  |    |    |    |    |          |                                 |
-|   +----+----+----+----+----+          | SERVICE CART (Transit Tray)     |
-|   |    | *  | *  |    |    |          | +----+ +----+ +----+            |
-|   +----+----+----+----+----+          | | T3 | | T5 | |    |            |
-|   |    | *  |    | L  | L  |          | +----+ +----+ +----+            |
+| ACTIVE EQUIPMENT GRID                 | SIDEBAR CONTROLS                |
+| Equipment: Herbalist's Bench          |                                 |
+|                                       | SPAWNERS (on-grid tiles)        |
+|   +----+----+----+----+----+          | Flora: Seed Planter (Lv 1)     |
+|   | S  | s  |    |    |    |          | Fungi: Spore Log (Lv 2)        |
 |   +----+----+----+----+----+          |                                 |
-|   | L  | L  | L  | L  | L  |          | THE PULVERIZER                  |
-|   +----+----+----+----+----+          | [ Drag items here for Dust ]    |
-|                                       |                                 |
-|                                       | QUICK NAVIGATION                |
-|                                       | [Open Storage Vault]            |
-|                                       | [Open Grand Codex]              |
-|                                       | [Active Commissions]            |
+|   |    | *  | *  |    |    |          | SERVICE CART (Transit Tray)     |
+|   +----+----+----+----+----+          | +----+ +----+ +----+            |
+|   |    | *  |    | L  | L  |          | | T3 | | T5 | |    |            |
+|   +----+----+----+----+----+          | +----+ +----+ +----+            |
+|   | L  | L  | L  | L  | L  |          |                                 |
+|   +----+----+----+----+----+          | THE PULVERIZER                  |
+|                                       | [ Drag items here for Dust ]    |
+| EQUIPMENT TABS                        |                                 |
+| [Herbalist] [Mortar] [Alembic]        | QUICK NAVIGATION                |
+|                                       | [Storage Vault] [Grand Codex]   |
+|                                       | [Blueprints]    [Patron Orders] |
 +---------------------------------------+---------------------------------+
 ```
 
@@ -70,7 +72,7 @@
 
 ```json
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "timestamp": 1757123456789,
   "currencies": {
     "dust": 1420,
@@ -89,27 +91,34 @@
       null
     ]
   },
-  "rooms": {
-    "prep_parlor": {
+  "workspaces": {
+    "the_first_sanctum": {
       "unlocked": true,
       "equipment": {
         "herbalist_bench": {
           "unlocked": true,
           "rows": 4,
-          "cols": 4,
+          "cols": 5,
+          "spawners": {
+            "flora": { "level": 1, "progress": 0 },
+            "fungi": { "level": 2, "progress": 0 }
+          },
           "tiles": [
-            { "index": 0, "type": "spawner", "spawnerId": "seed_planter" },
-            { "index": 1, "type": "empty" },
+            { "index": 0, "type": "spawner", "family": "flora" },
+            { "index": 1, "type": "spawner", "family": "fungi" },
             { "index": 2, "type": "item", "id": "flora_t2", "tier": 2 },
-            { "index": 15, "type": "locked", "unlockCost": 150 }
+            { "index": 19, "type": "locked", "unlockCost": 30 }
           ]
+        },
+        "mortar_station": {
+          "unlocked": false
         }
       }
     }
   },
   "codex": {
     "discoveredIds": ["flora_t1", "flora_t2", "flora_t3", "flora_t4"],
-    "completedMilestones": ["milestone_01"]
+    "unlockedBlueprints": ["mortar_station"]
   },
   "settings": {
     "hapticsEnabled": true,
@@ -125,13 +134,19 @@
 * **Scroll Prevention:** During active drags on mobile, apply `touch-action: none` to the game board container so swiping does not accidentally scroll the browser page.
 * **Keyboard Accessibility (Desktop):**
   * `1` through `5`: Quick-select Service Cart slot.
-  * `Space`: Trigger spawner on active board.
+  * `Q` and `W`: Trigger primary and secondary spawners on the active board.
   * `Escape`: Deselect active item or close open modal.
 
 ---
 
-## 5. Tasks for Next AI Planning Session
+## 5. Resolved Decisions & Remaining Tasks
 
+### Decided
+- [x] **UI Grouping:** Replaced "Rooms" with Workspaces and minimal equipment tabs.
+- [x] **Multi-Tree State:** Updated save schema to support dual spawners and multiple material families per board.
+- [x] **Blueprint Logic:** Added `unlockedBlueprints` array to Codex save block.
+
+### Open Tasks
 - [ ] Build a minimal vanilla JS proof-of-concept prototype verifying PointerEvent drag-and-drop across grid cells and cart slots.
 - [ ] Implement save/load serialization with a schema migration handler.
 - [ ] Define CSS design tokens (colors, antique borders, typography) matching the alchemical theme.
