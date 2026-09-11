@@ -1,9 +1,6 @@
-/**
- * Drag-and-drop controller — PointerEvent state machine.
- * Supports tap-to-select, drag-to-merge, grid unlocking, and pulverizing.
- */
 import { Container, Graphics, Text } from 'pixi.js';
 import { canMerge, executeMerge, playMergeAnimation } from './merge.js';
+import { createItem } from './item.js';
 import { TILE_STATE } from './board.js';
 import { getTierDef, getMaxTier } from './data/families.js';
 
@@ -20,99 +17,103 @@ const HL = {
 };
 
 export class DragController {
-  constructor({ app, board, hud, economy }) {
-    this.app   = app;
-    this.board = board;
-    this.hud   = hud;
+  constructor({ app, boards, cart, hud, economy }) {
+    this.app = app;
+    this.boards = boards;
+    this.cart = cart;
+    this.hud = hud;
     this.economy = economy;
 
-    this.state      = 'IDLE';
-    this.sourceIdx  = -1;
+    this.state = 'IDLE';
+    this.source = null; // { containerType: 'board'|'cart', obj: Board|Cart, idx: number }
     this.sourceItem = null;
     this.dragAvatar = null;
-    this.startPos   = null;
-    this.validTargets = new Set();
-    this.selectedIdx = -1;
-
+    this.startPos = null;
+    this.selected = null; // { containerType, obj, idx }
+    
     this._attachEvents();
   }
 
   _attachEvents() {
-    for (const tile of this.board.tiles) {
-      tile.container.on('pointerdown', (e) => this._onTileDown(e, tile.container.tileIndex));
-    }
-    
-    // Tap-to-pulverize support
+    this.boards.forEach(board => {
+      board.tiles.forEach(tile => {
+        tile.container.on('pointerdown', (e) => this._onDown(e, 'board', board, tile.container.tileIndex));
+      });
+    });
+
+    this.cart.tiles.forEach(tile => {
+      tile.container.on('pointerdown', (e) => this._onDown(e, 'cart', this.cart, tile.container.cartIndex));
+    });
+
     if (this.hud) {
       this.hud.pulverizerContainer.on('pointerdown', () => this._onPulverizerDown());
     }
 
     const stage = this.app.stage;
     stage.eventMode = 'static';
-    stage.hitArea   = this.app.screen;
-    stage.on('pointermove',      (e) => this._onMove(e));
-    stage.on('pointerup',        (e) => this._onUp(e));
-    stage.on('pointerupoutside', (e) => this._onUp(e));
-    stage.on('pointercancel',    ()  => this._cancelDrag());
+    stage.hitArea = this.app.screen;
+    stage.on('pointermove', e => this._onMove(e));
+    stage.on('pointerup', e => this._onUp(e));
+    stage.on('pointerupoutside', e => this._onUp(e));
+    stage.on('pointercancel', () => this._cancelDrag());
   }
 
   _onPulverizerDown() {
-    // If an item is selected via tap-to-select, clicking the pulverizer destroys it
-    if (this.selectedIdx >= 0) {
-      this._executePulverize(this.selectedIdx);
+    if (this.selected) {
+      this._executePulverize(this.selected);
     }
   }
 
-  _executePulverize(tileIdx) {
-    const item = this.board.getCell(tileIdx);
+  _executePulverize(loc) {
+    const item = loc.obj.getCell(loc.idx);
     if (!item) return false;
 
     const yieldAmt = getTierDef(item.family, item.tier).dustYield;
-
-    this.board.clearCell(tileIdx);
+    loc.obj.clearCell(loc.idx);
     if (this.economy) this.economy.addDust(yieldAmt);
     this._clearSelection();
     return true;
   }
 
-  _onTileDown(event, tileIdx) {
-    const state = this.board.getTileState(tileIdx);
-
-    // ── Unlock interactions ──
-    if (state === TILE_STATE.COBWEB) {
-      this.board.unlockCobweb(tileIdx);
-      return;
-    } else if (state === TILE_STATE.UNPURCHASED) {
-      if (this.board.isAdjacentToActive(tileIdx)) {
-        this.board.unlockExpansion(tileIdx);
+  _onDown(event, type, obj, idx) {
+    if (type === 'board') {
+      const state = obj.getTileState(idx);
+      if (state === TILE_STATE.COBWEB) {
+        obj.unlockCobweb(idx);
+        return;
+      } else if (state === TILE_STATE.UNPURCHASED) {
+        if (obj.isAdjacentToActive(idx)) obj.unlockExpansion(idx);
+        return;
       }
-      return;
+      if (state !== TILE_STATE.ACTIVE) return;
+    } else if (type === 'cart') {
+      if (!obj.isSlotActive(idx)) {
+        obj.unlockSlot(idx);
+        return;
+      }
     }
 
-    if (state !== TILE_STATE.ACTIVE) return;
+    const item = obj.getCell(idx);
 
-    const item = this.board.getCell(tileIdx);
-
-    if (this.selectedIdx >= 0) {
-      if (tileIdx === this.selectedIdx) {
-        this.state      = 'PRESSING';
-        this.sourceIdx  = tileIdx;
-        this.sourceItem = item;
-        this.startPos   = { x: event.global.x, y: event.global.y };
+    if (this.selected) {
+      if (this.selected.obj === obj && this.selected.idx === idx) {
+        this._startPressing(event, type, obj, idx, item);
         return;
       } else {
-        this._executeSelection(tileIdx);
+        this._executeSelection(type, obj, idx);
         return;
       }
     }
 
     if (!item) return;
+    this._startPressing(event, type, obj, idx, item);
+  }
 
-    this.state      = 'PRESSING';
-    this.sourceIdx  = tileIdx;
+  _startPressing(event, type, obj, idx, item) {
+    this.state = 'PRESSING';
+    this.source = { containerType: type, obj, idx };
     this.sourceItem = item;
-    this.startPos   = { x: event.global.x, y: event.global.y };
-    this._computeValidTargets();
+    this.startPos = { x: event.global.x, y: event.global.y };
   }
 
   _onMove(event) {
@@ -130,10 +131,10 @@ export class DragController {
 
   _onUp(event) {
     if (this.state === 'PRESSING') {
-      if (this.selectedIdx === this.sourceIdx) {
+      if (this.selected && this.selected.obj === this.source.obj && this.selected.idx === this.source.idx) {
         this._clearSelection();
       } else {
-        this._selectTile(this.sourceIdx);
+        this._selectTile(this.source);
       }
       this._resetPressState();
       return;
@@ -143,28 +144,25 @@ export class DragController {
     }
   }
 
+  _clearHighlights() {
+    this.boards.forEach(b => b.clearAllHighlights());
+    for(let i=0; i<this.cart.maxSlots; i++) this.cart.setHighlight(i, false);
+  }
+
   _beginDrag(event) {
     this.state = 'DRAGGING';
     this._clearSelection();
-    this._computeValidTargets();
 
-    const src = this.board.tiles[this.sourceIdx];
-    src.itemText.alpha = 0.3;
-    src.tierText.alpha = 0.3;
+    const srcTile = this.source.obj.tiles[this.source.idx];
+    srcTile.itemText.alpha = 0.3;
+    srcTile.tierText.alpha = 0.3;
 
     this._createAvatar(event);
-
-    for (const idx of this.validTargets) {
-      const cell = this.board.getCell(idx);
-      const m    = cell && canMerge(this.sourceItem, cell);
-      this.board.setTileHighlight(idx,
-        m ? HL.validMerge.c : HL.validMove.c,
-        m ? HL.validMerge.a : HL.validMove.a);
-    }
   }
 
   _updateDrag(event) {
     this._positionAvatar(event);
+    this._clearHighlights();
 
     if (this.hud) {
       const isHoverPulverizer = this.hud.hitTestPulverizer(event.global.x, event.global.y);
@@ -172,69 +170,151 @@ export class DragController {
       this.hud.setPulverizerActive(isHoverPulverizer, `🗑️ +${yieldAmt} Dust`);
     }
 
-    const local    = this.board.container.toLocal(event.global);
-    const hoverIdx = this.board.getTileAtLocal(local.x, local.y);
+    const target = this._getHoverTarget(event.global);
+    if (target) {
+      this._highlightTarget(target);
+    }
+  }
 
-    for (const idx of this.validTargets) {
-      const cell    = this.board.getCell(idx);
-      const isMerge = cell && canMerge(this.sourceItem, cell);
-      const hover   = idx === hoverIdx;
-      this.board.setTileHighlight(idx,
-        hover ? (isMerge ? HL.hoverMerge.c : HL.hoverMove.c)
-              : (isMerge ? HL.validMerge.c : HL.validMove.c),
-        hover ? (isMerge ? HL.hoverMerge.a : HL.hoverMove.a)
-              : (isMerge ? HL.validMerge.a : HL.validMove.a));
+  _getHoverTarget(globalPos) {
+    // Check cart first
+    if (this.cart.container.visible) {
+      const localCart = this.cart.container.toLocal(globalPos);
+      if (localCart.y >= 0 && localCart.y <= this.cart.height && localCart.x >= 0 && localCart.x <= this.cart.width) {
+        const step = this.cart.tileSize + this.cart.gap;
+        const col = Math.floor(localCart.x / step);
+        if (col >= 0 && col < this.cart.maxSlots && this.cart.isSlotActive(col)) {
+          return { type: 'cart', obj: this.cart, idx: col };
+        }
+      }
+    }
+
+    // Check visible boards
+    for (const board of this.boards) {
+      if (!board.container.visible) continue;
+      const local = board.container.toLocal(globalPos);
+      const idx = board.getTileAtLocal(local.x, local.y);
+      if (idx >= 0 && board.getTileState(idx) === TILE_STATE.ACTIVE) {
+        return { type: 'board', obj: board, idx };
+      }
+    }
+    return null;
+  }
+
+  _highlightTarget(target) {
+    if (target.obj === this.source.obj && target.idx === this.source.idx) return;
+
+    let valid = false;
+    let merge = false;
+
+    if (target.type === 'cart') {
+      const cell = target.obj.getCell(target.idx);
+      const isCapstone = this.sourceItem.tier === getMaxTier(this.sourceItem.family);
+      if (!cell && isCapstone) valid = true;
+    } else if (target.type === 'board') {
+      const board = target.obj;
+      if (board.allowedFamilies.includes(this.sourceItem.family)) {
+        const cell = board.getCell(target.idx);
+        if (!cell) valid = true;
+        else if (canMerge(this.sourceItem, cell)) {
+          valid = true;
+          merge = true;
+        }
+      }
+    }
+
+    const c = valid ? (merge ? HL.hoverMerge.c : HL.hoverMove.c) : HL.invalid.c;
+    const a = valid ? (merge ? HL.hoverMerge.a : HL.hoverMove.a) : HL.invalid.a;
+    
+    if (target.type === 'board') {
+      target.obj.setTileHighlight(target.idx, c, a);
+    } else {
+      target.obj.setHighlight(target.idx, true); // Cart highlight is binary for now
     }
   }
 
   _endDrag(event) {
-    // ── Pulverizer Check ──
     if (this.hud && this.hud.hitTestPulverizer(event.global.x, event.global.y)) {
-      const pulverized = this._executePulverize(this.sourceIdx);
-      if (!pulverized) {
-        this._cancelDrag();
+      const pulverized = this._executePulverize(this.source);
+      if (pulverized) {
+        this._destroyAvatar();
+        this._resetPressState();
         return;
       }
-      this._destroyAvatar();
-      this._resetPressState();
-      return;
     }
 
-    const local     = this.board.container.toLocal(event.global);
-    const targetIdx = this.board.getTileAtLocal(local.x, local.y);
-
+    const target = this._getHoverTarget(event.global);
     this._destroyAvatar();
-    this.board.clearAllHighlights();
+    this._clearHighlights();
     this._restoreSourceTile();
 
-    if (targetIdx >= 0 && targetIdx !== this.sourceIdx && this.validTargets.has(targetIdx)) {
-      const targetCell = this.board.getCell(targetIdx);
-      if (targetCell && canMerge(this.sourceItem, targetCell)) {
-        const merged = executeMerge(this.board, this.sourceIdx, targetIdx);
-        if (merged) playMergeAnimation(this.board, targetIdx);
-      } else if (!targetCell) {
-        this.board.clearCell(this.sourceIdx);
-        this.board.setCell(targetIdx, this.sourceItem);
-      }
-    } else if (targetIdx >= 0 && targetIdx !== this.sourceIdx) {
-      this.board.setTileHighlight(targetIdx, HL.invalid.c, HL.invalid.a);
-      setTimeout(() => this.board.clearTileHighlight(targetIdx), 200);
+    if (target && (target.obj !== this.source.obj || target.idx !== this.source.idx)) {
+      this._attemptDrop(target);
     }
-    
+
     this._resetPressState();
     if (this.hud) this.hud.setPulverizerActive(false);
   }
 
-  _cancelDrag() {
-    this._destroyAvatar();
-    this.board.clearAllHighlights();
-    this._restoreSourceTile();
-    this._resetPressState();
-    if (this.hud) this.hud.setPulverizerActive(false);
+  _attemptDrop(target) {
+    const srcObj = this.source.obj;
+    const srcIdx = this.source.idx;
+    const tgtObj = target.obj;
+    const tgtIdx = target.idx;
+    const item = this.sourceItem;
+
+    if (target.type === 'cart') {
+      const isCapstone = item.tier === getMaxTier(item.family);
+      const tgtCell = tgtObj.getCell(tgtIdx);
+      if (!isCapstone || tgtCell) {
+        this._showInvalid(target);
+        return;
+      }
+      srcObj.clearCell(srcIdx);
+      tgtObj.setCell(tgtIdx, item);
+    } else if (target.type === 'board') {
+      const board = tgtObj;
+      if (!board.allowedFamilies.includes(item.family)) {
+        this._showInvalid(target);
+        return;
+      }
+      const tgtCell = board.getCell(tgtIdx);
+      if (tgtCell) {
+        if (canMerge(item, tgtCell)) {
+          this._executeMergeCross(srcObj, srcIdx, tgtObj, tgtIdx, item, tgtCell);
+        } else {
+          this._showInvalid(target);
+        }
+      } else {
+        srcObj.clearCell(srcIdx);
+        tgtObj.setCell(tgtIdx, item);
+      }
+    }
+  }
+
+  _executeMergeCross(srcObj, srcIdx, tgtObj, tgtIdx, srcItem, tgtItem) {
+    srcObj.clearCell(srcIdx);
+    
+    // Simulate merge
+    const newItem = createItem(tgtItem.family, tgtItem.tier + 1);
+    tgtObj.setCell(tgtIdx, newItem);
+    playMergeAnimation(tgtObj, tgtIdx);
+
+    // Check unlocks
+    if (newItem.family === 'flora' && newItem.tier === 4 && this.economy) {
+      this.economy.unlockFloraT4();
+    }
+  }
+
+  _showInvalid(target) {
+    if (target.type === 'board') {
+      target.obj.setTileHighlight(target.idx, HL.invalid.c, HL.invalid.a);
+      setTimeout(() => target.obj.clearTileHighlight(target.idx), 200);
+    }
   }
 
   _createAvatar(event) {
-    const ts = this.board.tileSize;
+    const ts = 60; // Approximate
     this.dragAvatar = new Container();
 
     const bg = new Graphics();
@@ -249,15 +329,6 @@ export class DragController {
     emoji.x = ts / 2;
     emoji.y = ts * 0.38;
     this.dragAvatar.addChild(emoji);
-
-    const tier = new Text({
-      text: `T${this.sourceItem.tier}`,
-      style: { fontSize: Math.floor(ts * 0.22), fill: 0xd4c4a8, fontFamily: 'Georgia, serif', fontWeight: 'bold' },
-    });
-    tier.anchor.set(0.5);
-    tier.x = ts / 2;
-    tier.y = ts * 0.72;
-    this.dragAvatar.addChild(tier);
 
     this.dragAvatar.pivot.set(ts / 2, ts / 2);
     this.dragAvatar.alpha = 0.9;
@@ -279,84 +350,54 @@ export class DragController {
     }
   }
 
-  _selectTile(idx) {
+  _selectTile(loc) {
     this._clearSelection();
-    const item = this.board.getCell(idx);
+    const item = loc.obj.getCell(loc.idx);
     if (!item) return;
 
-    this.selectedIdx = idx;
-    this.sourceIdx   = idx;
-    this.sourceItem  = item;
-    this.board.setTileHighlight(idx, HL.selected.c, HL.selected.a);
+    this.selected = loc;
+    this.source = loc;
+    this.sourceItem = item;
+    
+    if (loc.type === 'board') loc.obj.setTileHighlight(loc.idx, HL.selected.c, HL.selected.a);
+    else loc.obj.setHighlight(loc.idx, true);
 
-    // Show pulverizer +Dust yield hint
     if (this.hud) {
       const yieldAmt = getTierDef(item.family, item.tier).dustYield;
       this.hud.setPulverizerActive(true, `🗑️ +${yieldAmt} Dust`);
     }
-
-    this._computeValidTargets();
-    for (const ti of this.validTargets) {
-      const cell = this.board.getCell(ti);
-      const m    = cell && canMerge(item, cell);
-      this.board.setTileHighlight(ti, m ? HL.validMerge.c : HL.validMove.c, m ? HL.validMerge.a : HL.validMove.a);
-    }
   }
 
-  _executeSelection(targetIdx) {
-    const sourceIdx  = this.selectedIdx;
-    const sourceItem = this.board.getCell(sourceIdx);
+  _executeSelection(type, tgtObj, tgtIdx) {
+    const src = this.selected;
+    const srcItem = src.obj.getCell(src.idx);
     this._clearSelection();
 
-    if (!sourceItem || targetIdx === sourceIdx) return;
+    if (!srcItem) return;
 
-    const targetCell = this.board.getCell(targetIdx);
-
-    if (targetCell && canMerge(sourceItem, targetCell)) {
-      const merged = executeMerge(this.board, sourceIdx, targetIdx);
-      if (merged) playMergeAnimation(this.board, targetIdx);
-    } else if (!targetCell) {
-      if (this.board.getTileState(targetIdx) === TILE_STATE.ACTIVE) {
-        this.board.clearCell(sourceIdx);
-        this.board.setCell(targetIdx, sourceItem);
-      }
-    } else {
-      this._selectTile(targetIdx);
-    }
+    this.source = src;
+    this.sourceItem = srcItem;
+    this._attemptDrop({ type, obj: tgtObj, idx: tgtIdx });
   }
 
   _clearSelection() {
-    this.selectedIdx = -1;
-    this.board.clearAllHighlights();
-    this.validTargets.clear();
+    this.selected = null;
+    this._clearHighlights();
     if (this.hud) this.hud.setPulverizerActive(false);
   }
 
-  _computeValidTargets() {
-    this.validTargets.clear();
-    for (let i = 0; i < this.board.cells.length; i++) {
-      if (i === this.sourceIdx) continue;
-      if (this.board.getTileState(i) !== TILE_STATE.ACTIVE) continue;
-      
-      const cell = this.board.getCell(i);
-      if (cell === null || canMerge(this.sourceItem, cell)) {
-        this.validTargets.add(i);
-      }
-    }
-  }
-
   _restoreSourceTile() {
-    if (this.sourceIdx >= 0) {
-      const t = this.board.tiles[this.sourceIdx];
+    if (this.source) {
+      const t = this.source.obj.tiles[this.source.idx];
       t.itemText.alpha = 1;
-      t.tierText.alpha = 1;
+      if (t.tierText) t.tierText.alpha = 1;
     }
   }
 
   _resetPressState() {
-    this.state      = 'IDLE';
-    this.sourceIdx  = -1;
+    this.state = 'IDLE';
+    this.source = null;
     this.sourceItem = null;
-    this.startPos   = null;
+    this.startPos = null;
   }
 }

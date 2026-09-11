@@ -38,13 +38,82 @@ export class HUD {
     this.pulverizerContainer.addChild(this.pulverizerText);
     this.container.addChild(this.pulverizerContainer);
 
+    // ── Tabs ──
+    this.tabContainer = new Container();
+    this.activeTab = 0; // 0 = Herbalist, 1 = Mortar
+    this.onTabChange = null;
+
+    this.tabHerbalist = this._createTab('Herbalist\'s Bench', 0);
+    this.tabMortar = this._createTab('Mortar Station', 1);
+    
+    this.tabContainer.addChild(this.tabHerbalist);
+    this.tabContainer.addChild(this.tabMortar);
+    this.container.addChild(this.tabContainer);
+
     // Subscribe to economy updates
     if (this.economy) {
       this.economy.onUpdate((dust) => {
         this.walletText.text = `✨ ${dust}`;
         this._drawWallet();
+        this._updateTabs();
       });
+    } else {
+      this._updateTabs();
     }
+  }
+
+  _createTab(label, index) {
+    const tab = new Container();
+    tab.eventMode = 'static';
+    tab.cursor = 'pointer';
+    
+    const bg = new Graphics();
+    const text = new Text({
+      text: label,
+      style: { fontSize: 16, fill: 0x8a7a64, fontFamily: 'Georgia, serif' }
+    });
+    text.anchor.set(0.5);
+    
+    tab.addChild(bg);
+    tab.addChild(text);
+    tab.bg = bg;
+    tab.text = text;
+    
+    tab.on('pointerdown', () => {
+      if (index === 1 && !this.economy.discoveredFloraT4) return;
+      if (this.activeTab !== index) {
+        this.activeTab = index;
+        this._updateTabs();
+        if (this.onTabChange) this.onTabChange(index);
+      }
+    });
+    
+    return tab;
+  }
+
+  _updateTabs() {
+    this._drawTab(this.tabHerbalist, 0, this.activeTab === 0);
+    
+    const mortarUnlocked = this.economy ? this.economy.discoveredFloraT4 : false;
+    if (mortarUnlocked) {
+      this.tabMortar.text.text = 'Mortar Station';
+      this.tabMortar.cursor = 'pointer';
+    } else {
+      this.tabMortar.text.text = '🔒 Locked';
+      this.tabMortar.cursor = 'default';
+    }
+    
+    this._drawTab(this.tabMortar, 1, this.activeTab === 1, !mortarUnlocked);
+  }
+
+  _drawTab(tab, index, isActive, isLocked = false) {
+    const w = 150;
+    const h = 30;
+    tab.bg.clear();
+    const color = isActive ? 0x4a3f35 : (isLocked ? 0x1a1210 : 0x251a14);
+    const stroke = isActive ? 0xd4c4a8 : 0x4a3f35;
+    tab.bg.roundRect(-w/2, -h/2, w, h, 8).fill(color).stroke({ color: stroke, width: 2 });
+    tab.text.style.fill = isActive ? 0xf0e6d2 : (isLocked ? 0x4a3f35 : 0x8a7a64);
   }
 
   _drawWallet() {
@@ -72,6 +141,12 @@ export class HUD {
     this.walletContainer.x = cx;
     this.walletContainer.y = Math.max(20, screenHeight * 0.05);
     this._drawWallet();
+
+    // Tabs below wallet
+    this.tabContainer.x = cx;
+    this.tabContainer.y = this.walletContainer.y + 40;
+    this.tabHerbalist.x = -80;
+    this.tabMortar.x = 80;
 
     // Pulverizer bottom center
     this.pulverizerContainer.x = cx;

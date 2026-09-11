@@ -6,6 +6,8 @@ export class Economy {
   constructor() {
     this.dust = 0;
     this.expansionsBought = 0;
+    this.cartSlotsBought = 0;
+    this.discoveredFloraT4 = false;
     this.listeners = [];
   }
 
@@ -59,6 +61,35 @@ export class Economy {
       return true;
     }
     return false;
+  }
+
+  unlockFloraT4() {
+    if (!this.discoveredFloraT4) {
+      this.discoveredFloraT4 = true;
+      this.notify();
+    }
+  }
+
+  getCartExpansionCost() {
+    const costs = [200, 750, 2000];
+    if (this.cartSlotsBought < costs.length) {
+      return costs[this.cartSlotsBought];
+    }
+    return null; // Max level reached
+  }
+
+  buyCartExpansion() {
+    const cost = this.getCartExpansionCost();
+    if (cost !== null && this.spendDust(cost)) {
+      this.cartSlotsBought++;
+      this.notify();
+      return true;
+    }
+    return false;
+  }
+
+  getCartSlots() {
+    return 2 + this.cartSlotsBought;
   }
 
   /**

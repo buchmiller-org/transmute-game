@@ -25,10 +25,34 @@ export const FUNGI = {
   ],
 };
 
+export const SALTS = {
+  id: 'salts',
+  name: 'Salts & Catalysts',
+  tiers: [
+    { tier: 1, name: 'Calcite Shard', emoji: '🧂', dustYield: 1 },
+    { tier: 2, name: 'Vitriol Salt', emoji: '🧪', dustYield: 3 },
+    { tier: 3, name: 'Volatile Calx', emoji: '⚗️', dustYield: 8 },
+    { tier: 4, name: "Philosopher's Reagent", emoji: '💎', dustYield: 20 },
+  ],
+};
+
+export const PIGMENTS = {
+  id: 'pigments',
+  name: 'Pigments',
+  tiers: [
+    { tier: 1, name: 'Chalk Dust', emoji: '🤍', dustYield: 1 },
+    { tier: 2, name: 'Ocher Paste', emoji: '🟠', dustYield: 3 },
+    { tier: 3, name: 'Lapis Extract', emoji: '🔵', dustYield: 8 },
+    { tier: 4, name: 'Prismatic Dye', emoji: '🌈', dustYield: 20 },
+  ],
+};
+
 /** All registered families, keyed by ID. */
 export const FAMILIES = {
   flora: FLORA,
   fungi: FUNGI,
+  salts: SALTS,
+  pigments: PIGMENTS,
 };
 
 /** Look up a family definition by ID. */

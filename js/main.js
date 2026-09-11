@@ -8,6 +8,7 @@ import { Spawner } from './spawner.js';
 import { DragController } from './drag.js';
 import { Economy } from './economy.js';
 import { HUD } from './hud.js';
+import { Cart } from './cart.js';
 import { updateAnimations } from './animations.js';
 
 async function init() {
@@ -27,21 +28,32 @@ async function init() {
   const maxBoardWidth = Math.min(app.screen.width * 0.95, 520);
   const tileSize = Math.floor((maxBoardWidth - (COLS - 1) * GAP) / COLS);
 
-  const board = new Board({ economy, rows: ROWS, cols: COLS, tileSize, gap: GAP });
-  app.stage.addChild(board.container);
+  const board1 = new Board({ economy, allowedFamilies: ['flora', 'fungi'], rows: ROWS, cols: COLS, tileSize, gap: GAP });
+  const board2 = new Board({ economy, allowedFamilies: ['salts', 'pigments'], rows: ROWS, cols: COLS, tileSize, gap: GAP });
+  app.stage.addChild(board1.container);
+  app.stage.addChild(board2.container);
+
+  const cart = new Cart({ economy, maxSlots: 5, tileSize, gap: GAP });
+  app.stage.addChild(cart.container);
 
   const hud = new HUD({ app, economy });
   app.stage.addChild(hud.container);
 
   // ───── Spawners ─────
-  const floraSpawner = new Spawner({ board, familyId: 'flora', emoji: '🌱', label: 'Plant Seed', buttonWidth: 140 });
+  const floraSpawner = new Spawner({ board: board1, familyId: 'flora', emoji: '🌱', label: 'Plant Seed', buttonWidth: 140 });
+  const fungiSpawner = new Spawner({ board: board1, familyId: 'fungi', emoji: '🍄', label: 'Spore Log', buttonWidth: 140 });
   app.stage.addChild(floraSpawner.container);
-
-  const fungiSpawner = new Spawner({ board, familyId: 'fungi', emoji: '🍄', label: 'Spore Log', buttonWidth: 140 });
   app.stage.addChild(fungiSpawner.container);
 
+  const saltSpawner = new Spawner({ board: board2, familyId: 'salts', emoji: '🧂', label: 'Salt Grinder', buttonWidth: 140 });
+  const pigmentSpawner = new Spawner({ board: board2, familyId: 'pigments', emoji: '🤍', label: 'Pigment Mortar', buttonWidth: 140 });
+  app.stage.addChild(saltSpawner.container);
+  app.stage.addChild(pigmentSpawner.container);
+
   // ───── Drag Controller ─────
-  new DragController({ app, board, hud, economy });
+  new DragController({ app, boards: [board1, board2], cart, hud, economy });
+
+  hud.onTabChange = () => layout();
 
   // ───── Layout ─────
   function layout() {
@@ -49,20 +61,42 @@ async function init() {
 
     hud.layout(app.screen.width, app.screen.height);
 
-    // Board centered vertically between wallet and pulverizer
-    const availHeight = hud.pulverizerContainer.y - hud.walletContainer.y - 60;
-    const boardCenterY = hud.walletContainer.y + 40 + (availHeight / 2);
+    const activeBoard = hud.activeTab === 0 ? board1 : board2;
+    board1.container.visible = hud.activeTab === 0;
+    board2.container.visible = hud.activeTab === 1;
 
-    board.container.x = cx - board.width / 2;
-    board.container.y = boardCenterY - board.height / 2 - 20;
+    floraSpawner.container.visible = hud.activeTab === 0;
+    fungiSpawner.container.visible = hud.activeTab === 0;
+    saltSpawner.container.visible = hud.activeTab === 1;
+    pigmentSpawner.container.visible = hud.activeTab === 1;
 
+    // Cart position: above pulverizer
+    cart.container.x = cx - cart.width / 2;
+    cart.container.y = hud.pulverizerContainer.y - hud.pulverizerBounds.h / 2 - cart.height - 20;
+
+    // Board centered vertically between tabs and cart
+    const topY = hud.tabContainer.y + 20;
+    const bottomY = cart.container.y - 20;
+    const availHeight = bottomY - topY;
+    
     // Spawners below board
-    const spawnerY = board.container.y + board.height + 24;
+    const boardCenterY = topY + availHeight / 2 - 20;
+    
+    board1.container.x = cx - board1.width / 2;
+    board1.container.y = boardCenterY - board1.height / 2;
+    board2.container.x = cx - board2.width / 2;
+    board2.container.y = boardCenterY - board2.height / 2;
+
+    const spawnerY = board1.container.y + board1.height + 20;
     floraSpawner.container.x = cx - floraSpawner.buttonWidth - 10;
     floraSpawner.container.y = spawnerY;
-    
     fungiSpawner.container.x = cx + 10;
     fungiSpawner.container.y = spawnerY;
+
+    saltSpawner.container.x = cx - saltSpawner.buttonWidth - 10;
+    saltSpawner.container.y = spawnerY;
+    pigmentSpawner.container.x = cx + 10;
+    pigmentSpawner.container.y = spawnerY;
 
     app.stage.hitArea = app.screen;
   }
@@ -79,7 +113,9 @@ async function init() {
   });
 
   layout();
-  board.renderAll();
+  board1.renderAll();
+  board2.renderAll();
+  cart.renderAll();
 }
 
 init().catch((err) => {

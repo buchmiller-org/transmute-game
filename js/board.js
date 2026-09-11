@@ -25,8 +25,9 @@ const C = {
 };
 
 export class Board {
-  constructor({ economy, rows = 5, cols = 7, tileSize = 60, gap = 4 }) {
+  constructor({ economy, allowedFamilies = [], rows = 5, cols = 7, tileSize = 60, gap = 4 }) {
     this.economy = economy;
+    this.allowedFamilies = allowedFamilies;
     this.rows = rows;
     this.cols = cols;
     this.tileSize = tileSize;
@@ -109,6 +110,13 @@ export class Board {
     capstoneGlow.visible = false;
     tc.addChild(capstoneGlow);
 
+    const exportArrow = new Text({ text: '⬆️', style: { fontSize: Math.floor(ts * 0.2), fill: 0xffd700 } });
+    exportArrow.anchor.set(0.5);
+    exportArrow.x = ts * 0.8;
+    exportArrow.y = ts * 0.2;
+    exportArrow.visible = false;
+    tc.addChild(exportArrow);
+
     const itemText = new Text({ text: '', style: { fontSize: Math.floor(ts * 0.45), fill: C.textPrimary, fontFamily: 'serif' } });
     itemText.anchor.set(0.5);
     itemText.x = ts / 2;
@@ -128,7 +136,7 @@ export class Board {
     tc.addChild(overlayText);
 
     this.container.addChild(tc);
-    this.tiles[idx] = { container: tc, bg, highlight, capstoneGlow, itemText, tierText, overlayText };
+    this.tiles[idx] = { container: tc, bg, highlight, capstoneGlow, exportArrow, itemText, tierText, overlayText };
   }
 
   _drawBg(gfx, color, dash = false) {
@@ -231,6 +239,7 @@ export class Board {
     tile.tierText.text = '';
     tile.overlayText.text = '';
     tile.capstoneGlow.visible = false;
+    tile.exportArrow.visible = false;
     tile.container.alpha = 1.0;
     tile.itemText.alpha = 1.0;
     tile.tierText.alpha = 1.0;
@@ -240,7 +249,9 @@ export class Board {
         this._drawBg(tile.bg, C.occupiedTile);
         tile.itemText.text = item.emoji;
         tile.tierText.text = `T${item.tier}`;
-        tile.capstoneGlow.visible = (item.tier === getMaxTier(item.family));
+        const isCapstone = item.tier === getMaxTier(item.family);
+        tile.capstoneGlow.visible = isCapstone;
+        tile.exportArrow.visible = isCapstone;
       } else {
         this._drawBg(tile.bg, C.emptyTile);
       }
