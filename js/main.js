@@ -1,15 +1,16 @@
 /**
- * Transmute — Phase 1: The Merge Sandbox
- * Entry point: initializes PixiJS, wires up board, spawner, and drag controller.
+ * Transmute — Phase 2: Spatial Pressure & the Dust Economy
+ * Entry point: initializes PixiJS, Economy, Board, HUD, Spawners, and DragController.
  */
 import { Application, Text } from 'pixi.js';
 import { Board } from './board.js';
 import { Spawner } from './spawner.js';
 import { DragController } from './drag.js';
+import { Economy } from './economy.js';
+import { HUD } from './hud.js';
 import { updateAnimations } from './animations.js';
 
 async function init() {
-  // ───── PixiJS Application ─────
   const app = new Application();
   await app.init({
     background: 0x1a1210,
@@ -18,73 +19,51 @@ async function init() {
   });
   document.getElementById('game-container').appendChild(app.canvas);
 
-  // ───── Compute tile size from viewport ─────
-  const COLS = 5, ROWS = 4, GAP = 5;
-  const maxBoardWidth = Math.min(app.screen.width * 0.88, 460);
+  // ───── Core Systems ─────
+  const economy = new Economy();
+
+  // Compute tile size from viewport for a 7x5 board
+  const COLS = 7, ROWS = 5, GAP = 5;
+  const maxBoardWidth = Math.min(app.screen.width * 0.95, 520);
   const tileSize = Math.floor((maxBoardWidth - (COLS - 1) * GAP) / COLS);
 
-  // ───── Board ─────
-  const board = new Board({ rows: ROWS, cols: COLS, tileSize, gap: GAP });
+  const board = new Board({ economy, rows: ROWS, cols: COLS, tileSize, gap: GAP });
   app.stage.addChild(board.container);
 
-  // ───── Spawner Button ─────
-  const spawner = new Spawner({
-    board,
-    familyId: 'flora',
-    emoji: '🌱',
-    label: 'Plant Seed',
-  });
-  app.stage.addChild(spawner.container);
+  const hud = new HUD({ app, economy });
+  app.stage.addChild(hud.container);
 
-  // ───── Title ─────
-  const title = new Text({
-    text: 'TRANSMUTE',
-    style: {
-      fontSize: 28,
-      fill: 0xd4c4a8,
-      fontFamily: 'Georgia, serif',
-      fontWeight: 'bold',
-      letterSpacing: 6,
-    },
-  });
-  title.anchor.set(0.5, 0);
-  app.stage.addChild(title);
+  // ───── Spawners ─────
+  const floraSpawner = new Spawner({ board, familyId: 'flora', emoji: '🌱', label: 'Plant Seed', buttonWidth: 140 });
+  app.stage.addChild(floraSpawner.container);
 
-  // ───── Subtitle ─────
-  const subtitle = new Text({
-    text: "Herbalist's Bench  ·  5 × 4",
-    style: {
-      fontSize: 14,
-      fill: 0x8a7a64,
-      fontFamily: 'Georgia, serif',
-      fontStyle: 'italic',
-    },
-  });
-  subtitle.anchor.set(0.5, 0);
-  app.stage.addChild(subtitle);
+  const fungiSpawner = new Spawner({ board, familyId: 'fungi', emoji: '🍄', label: 'Spore Log', buttonWidth: 140 });
+  app.stage.addChild(fungiSpawner.container);
 
   // ───── Drag Controller ─────
-  new DragController({ app, board });
+  new DragController({ app, board, hud, economy });
 
-  // ───── Layout (positions everything based on current screen size) ─────
+  // ───── Layout ─────
   function layout() {
     const cx = app.screen.width / 2;
 
-    // Vertical stack: title → subtitle → board → spawner
-    const titleY = Math.max(16, app.screen.height * 0.06);
+    hud.layout(app.screen.width, app.screen.height);
 
-    title.x    = cx;
-    title.y    = titleY;
-    subtitle.x = cx;
-    subtitle.y = titleY + 36;
+    // Board centered vertically between wallet and pulverizer
+    const availHeight = hud.pulverizerContainer.y - hud.walletContainer.y - 60;
+    const boardCenterY = hud.walletContainer.y + 40 + (availHeight / 2);
 
     board.container.x = cx - board.width / 2;
-    board.container.y = subtitle.y + 32;
+    board.container.y = boardCenterY - board.height / 2 - 20;
 
-    spawner.container.x = cx - spawner.buttonWidth / 2;
-    spawner.container.y = board.container.y + board.height + 28;
+    // Spawners below board
+    const spawnerY = board.container.y + board.height + 24;
+    floraSpawner.container.x = cx - floraSpawner.buttonWidth - 10;
+    floraSpawner.container.y = spawnerY;
+    
+    fungiSpawner.container.x = cx + 10;
+    fungiSpawner.container.y = spawnerY;
 
-    // Ensure stage hit area covers the full canvas (needed for drag events)
     app.stage.hitArea = app.screen;
   }
 
@@ -92,8 +71,6 @@ async function init() {
   let lastW = 0, lastH = 0;
   app.ticker.add((ticker) => {
     updateAnimations(ticker.deltaMS);
-
-    // Re-layout on resize (checked every frame, cheap comparison)
     if (app.screen.width !== lastW || app.screen.height !== lastH) {
       lastW = app.screen.width;
       lastH = app.screen.height;
@@ -101,12 +78,10 @@ async function init() {
     }
   });
 
-  // Initial layout + render
   layout();
   board.renderAll();
 }
 
-// ───── Bootstrap ─────
 init().catch((err) => {
   console.error('Transmute init failed:', err);
   document.body.innerHTML = `

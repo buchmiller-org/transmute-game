@@ -13,13 +13,14 @@ export class Spawner {
    * @param {string} opts.familyId
    * @param {string} [opts.emoji='🌱']
    * @param {string} [opts.label='Plant Seed']
+   * @param {number} [opts.buttonWidth=200]
    */
-  constructor({ board, familyId, emoji = '🌱', label = 'Plant Seed' }) {
+  constructor({ board, familyId, emoji = '🌱', label = 'Plant Seed', buttonWidth = 200 }) {
     this.board    = board;
     this.familyId = familyId;
 
     // Button dimensions
-    this.buttonWidth  = 200;
+    this.buttonWidth  = buttonWidth;
     this.buttonHeight = 50;
 
     // ── Build PixiJS button ──

@@ -1,18 +1,17 @@
 /**
  * Drag-and-drop controller — PointerEvent state machine.
- * Supports two interaction modes:
- *   1. Drag-and-drop (press → move → release)
- *   2. Tap-to-select (tap source, tap destination)
+ * Supports tap-to-select, drag-to-merge, grid unlocking, and pulverizing.
  */
 import { Container, Graphics, Text } from 'pixi.js';
 import { canMerge, executeMerge, playMergeAnimation } from './merge.js';
+import { TILE_STATE } from './board.js';
+import { getTierDef, getMaxTier } from './data/families.js';
 
-const DRAG_THRESHOLD = 8;     // px movement before a press becomes a drag
-const TOUCH_Y_OFFSET = -60;   // offset drag avatar above finger on touch
+const DRAG_THRESHOLD = 8;
+const TOUCH_Y_OFFSET = -60;
 
-/** Highlight color/alpha presets */
 const HL = {
-  selected:   { c: 0xffd700, a: 0.45 }, // Increased alpha for clearer selection
+  selected:   { c: 0xffd700, a: 0.45 },
   validMove:  { c: 0x4488aa, a: 0.15 },
   validMerge: { c: 0x88cc44, a: 0.25 },
   hoverMove:  { c: 0x66aacc, a: 0.35 },
@@ -21,73 +20,94 @@ const HL = {
 };
 
 export class DragController {
-  /**
-   * @param {object} opts
-   * @param {Application} opts.app   - PixiJS Application
-   * @param {Board}       opts.board - The game board
-   */
-  constructor({ app, board }) {
+  constructor({ app, board, hud, economy }) {
     this.app   = app;
     this.board = board;
+    this.hud   = hud;
+    this.economy = economy;
 
-    // Drag state
-    this.state      = 'IDLE';   // IDLE | PRESSING | DRAGGING
+    this.state      = 'IDLE';
     this.sourceIdx  = -1;
     this.sourceItem = null;
     this.dragAvatar = null;
     this.startPos   = null;
     this.validTargets = new Set();
-
-    // Tap-to-select state
     this.selectedIdx = -1;
 
     this._attachEvents();
   }
 
-  // ═══════════════════ Event Wiring ═══════════════════
-
   _attachEvents() {
-    // Per-tile pointerdown
     for (const tile of this.board.tiles) {
-      tile.container.on('pointerdown', (e) =>
-        this._onTileDown(e, tile.container.tileIndex));
+      tile.container.on('pointerdown', (e) => this._onTileDown(e, tile.container.tileIndex));
+    }
+    
+    // Tap-to-pulverize support
+    if (this.hud) {
+      this.hud.pulverizerContainer.on('pointerdown', () => this._onPulverizerDown());
     }
 
-    // Stage-level events for move / up / cancel
     const stage = this.app.stage;
     stage.eventMode = 'static';
     stage.hitArea   = this.app.screen;
-
     stage.on('pointermove',      (e) => this._onMove(e));
     stage.on('pointerup',        (e) => this._onUp(e));
     stage.on('pointerupoutside', (e) => this._onUp(e));
     stage.on('pointercancel',    ()  => this._cancelDrag());
   }
 
-  // ═══════════════════ Pointer Handlers ═══════════════════
+  _onPulverizerDown() {
+    // If an item is selected via tap-to-select, clicking the pulverizer destroys it
+    if (this.selectedIdx >= 0) {
+      this._executePulverize(this.selectedIdx);
+    }
+  }
+
+  _executePulverize(tileIdx) {
+    const item = this.board.getCell(tileIdx);
+    if (!item) return false;
+
+    const yieldAmt = getTierDef(item.family, item.tier).dustYield;
+
+    this.board.clearCell(tileIdx);
+    if (this.economy) this.economy.addDust(yieldAmt);
+    this._clearSelection();
+    return true;
+  }
 
   _onTileDown(event, tileIdx) {
+    const state = this.board.getTileState(tileIdx);
+
+    // ── Unlock interactions ──
+    if (state === TILE_STATE.COBWEB) {
+      this.board.unlockCobweb(tileIdx);
+      return;
+    } else if (state === TILE_STATE.UNPURCHASED) {
+      if (this.board.isAdjacentToActive(tileIdx)) {
+        this.board.unlockExpansion(tileIdx);
+      }
+      return;
+    }
+
+    if (state !== TILE_STATE.ACTIVE) return;
+
     const item = this.board.getCell(tileIdx);
 
-    // ── Active selection handling ──
     if (this.selectedIdx >= 0) {
       if (tileIdx === this.selectedIdx) {
-        // Tapped the already-selected tile. Prepare to drag it.
         this.state      = 'PRESSING';
         this.sourceIdx  = tileIdx;
         this.sourceItem = item;
         this.startPos   = { x: event.global.x, y: event.global.y };
         return;
       } else {
-        // Tapped a different tile: execute the selection action (move/merge)
         this._executeSelection(tileIdx);
         return;
       }
     }
 
-    if (!item) return; // empty tile — ignore
+    if (!item) return;
 
-    // ── Begin potential drag or new selection ──
     this.state      = 'PRESSING';
     this.sourceIdx  = tileIdx;
     this.sourceItem = item;
@@ -110,12 +130,9 @@ export class DragController {
 
   _onUp(event) {
     if (this.state === 'PRESSING') {
-      // Short press, no real movement -> Tap-to-select logic
       if (this.selectedIdx === this.sourceIdx) {
-        // Tapped the currently selected tile again -> Deselect it
         this._clearSelection();
       } else {
-        // Select the new tile
         this._selectTile(this.sourceIdx);
       }
       this._resetPressState();
@@ -126,26 +143,17 @@ export class DragController {
     }
   }
 
-  // ═══════════════════ Drag Lifecycle ═══════════════════
-
   _beginDrag(event) {
     this.state = 'DRAGGING';
-    
-    // Clear any existing tap-to-select state (this empties validTargets)
     this._clearSelection();
-
-    // Re-compute valid targets specifically for this drag
     this._computeValidTargets();
 
-    // Dim the source tile's item display
     const src = this.board.tiles[this.sourceIdx];
     src.itemText.alpha = 0.3;
     src.tierText.alpha = 0.3;
 
-    // Create floating drag avatar
     this._createAvatar(event);
 
-    // Highlight valid drop targets
     for (const idx of this.validTargets) {
       const cell = this.board.getCell(idx);
       const m    = cell && canMerge(this.sourceItem, cell);
@@ -158,11 +166,15 @@ export class DragController {
   _updateDrag(event) {
     this._positionAvatar(event);
 
-    // Determine which tile the pointer is over
+    if (this.hud) {
+      const isHoverPulverizer = this.hud.hitTestPulverizer(event.global.x, event.global.y);
+      const yieldAmt = getTierDef(this.sourceItem.family, this.sourceItem.tier).dustYield;
+      this.hud.setPulverizerActive(isHoverPulverizer, `🗑️ +${yieldAmt} Dust`);
+    }
+
     const local    = this.board.container.toLocal(event.global);
     const hoverIdx = this.board.getTileAtLocal(local.x, local.y);
 
-    // Update highlight intensity for hovered vs non-hovered targets
     for (const idx of this.validTargets) {
       const cell    = this.board.getCell(idx);
       const isMerge = cell && canMerge(this.sourceItem, cell);
@@ -176,34 +188,41 @@ export class DragController {
   }
 
   _endDrag(event) {
+    // ── Pulverizer Check ──
+    if (this.hud && this.hud.hitTestPulverizer(event.global.x, event.global.y)) {
+      const pulverized = this._executePulverize(this.sourceIdx);
+      if (!pulverized) {
+        this._cancelDrag();
+        return;
+      }
+      this._destroyAvatar();
+      this._resetPressState();
+      return;
+    }
+
     const local     = this.board.container.toLocal(event.global);
     const targetIdx = this.board.getTileAtLocal(local.x, local.y);
 
-    // Clean up visuals
     this._destroyAvatar();
     this.board.clearAllHighlights();
     this._restoreSourceTile();
 
-    // ── Resolve drop ──
     if (targetIdx >= 0 && targetIdx !== this.sourceIdx && this.validTargets.has(targetIdx)) {
       const targetCell = this.board.getCell(targetIdx);
-
       if (targetCell && canMerge(this.sourceItem, targetCell)) {
-        // Merge!
         const merged = executeMerge(this.board, this.sourceIdx, targetIdx);
         if (merged) playMergeAnimation(this.board, targetIdx);
       } else if (!targetCell) {
-        // Move to empty tile
         this.board.clearCell(this.sourceIdx);
         this.board.setCell(targetIdx, this.sourceItem);
       }
     } else if (targetIdx >= 0 && targetIdx !== this.sourceIdx) {
-      // Invalid target → brief red flash
       this.board.setTileHighlight(targetIdx, HL.invalid.c, HL.invalid.a);
       setTimeout(() => this.board.clearTileHighlight(targetIdx), 200);
     }
-
+    
     this._resetPressState();
+    if (this.hud) this.hud.setPulverizerActive(false);
   }
 
   _cancelDrag() {
@@ -211,9 +230,8 @@ export class DragController {
     this.board.clearAllHighlights();
     this._restoreSourceTile();
     this._resetPressState();
+    if (this.hud) this.hud.setPulverizerActive(false);
   }
-
-  // ═══════════════════ Drag Avatar ═══════════════════
 
   _createAvatar(event) {
     const ts = this.board.tileSize;
@@ -234,12 +252,7 @@ export class DragController {
 
     const tier = new Text({
       text: `T${this.sourceItem.tier}`,
-      style: {
-        fontSize: Math.floor(ts * 0.22),
-        fill: 0xd4c4a8,
-        fontFamily: 'Georgia, serif',
-        fontWeight: 'bold',
-      },
+      style: { fontSize: Math.floor(ts * 0.22), fill: 0xd4c4a8, fontFamily: 'Georgia, serif', fontWeight: 'bold' },
     });
     tier.anchor.set(0.5);
     tier.x = ts / 2;
@@ -249,7 +262,6 @@ export class DragController {
     this.dragAvatar.pivot.set(ts / 2, ts / 2);
     this.dragAvatar.alpha = 0.9;
     this._positionAvatar(event);
-
     this.app.stage.addChild(this.dragAvatar);
   }
 
@@ -267,25 +279,27 @@ export class DragController {
     }
   }
 
-  // ═══════════════════ Tap-to-Select ═══════════════════
-
   _selectTile(idx) {
     this._clearSelection();
     const item = this.board.getCell(idx);
     if (!item) return;
 
     this.selectedIdx = idx;
+    this.sourceIdx   = idx;
     this.sourceItem  = item;
     this.board.setTileHighlight(idx, HL.selected.c, HL.selected.a);
 
-    // Show valid target hints
+    // Show pulverizer +Dust yield hint
+    if (this.hud) {
+      const yieldAmt = getTierDef(item.family, item.tier).dustYield;
+      this.hud.setPulverizerActive(true, `🗑️ +${yieldAmt} Dust`);
+    }
+
     this._computeValidTargets();
     for (const ti of this.validTargets) {
       const cell = this.board.getCell(ti);
       const m    = cell && canMerge(item, cell);
-      this.board.setTileHighlight(ti,
-        m ? HL.validMerge.c : HL.validMove.c,
-        m ? HL.validMerge.a : HL.validMove.a);
+      this.board.setTileHighlight(ti, m ? HL.validMerge.c : HL.validMove.c, m ? HL.validMerge.a : HL.validMove.a);
     }
   }
 
@@ -302,10 +316,11 @@ export class DragController {
       const merged = executeMerge(this.board, sourceIdx, targetIdx);
       if (merged) playMergeAnimation(this.board, targetIdx);
     } else if (!targetCell) {
-      this.board.clearCell(sourceIdx);
-      this.board.setCell(targetIdx, sourceItem);
+      if (this.board.getTileState(targetIdx) === TILE_STATE.ACTIVE) {
+        this.board.clearCell(sourceIdx);
+        this.board.setCell(targetIdx, sourceItem);
+      }
     } else {
-      // Can't merge → select the tapped tile instead
       this._selectTile(targetIdx);
     }
   }
@@ -314,14 +329,15 @@ export class DragController {
     this.selectedIdx = -1;
     this.board.clearAllHighlights();
     this.validTargets.clear();
+    if (this.hud) this.hud.setPulverizerActive(false);
   }
-
-  // ═══════════════════ Helpers ═══════════════════
 
   _computeValidTargets() {
     this.validTargets.clear();
     for (let i = 0; i < this.board.cells.length; i++) {
       if (i === this.sourceIdx) continue;
+      if (this.board.getTileState(i) !== TILE_STATE.ACTIVE) continue;
+      
       const cell = this.board.getCell(i);
       if (cell === null || canMerge(this.sourceItem, cell)) {
         this.validTargets.add(i);
