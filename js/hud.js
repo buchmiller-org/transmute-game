@@ -15,13 +15,29 @@ export class HUD {
     this.walletContainer = new Container();
     this.walletBg = new Graphics();
     this.walletText = new Text({
-      text: '✨ 0',
-      style: { fontSize: 24, fill: 0xffdd44, fontFamily: 'Georgia, serif', fontWeight: 'bold' }
+      text: '✨ 0  |  👑 0',
+      style: { fontSize: 20, fill: 0xffdd44, fontFamily: 'Georgia, serif', fontWeight: 'bold' }
     });
     this.walletText.anchor.set(0.5);
     this.walletContainer.addChild(this.walletBg);
     this.walletContainer.addChild(this.walletText);
     this.container.addChild(this.walletContainer);
+
+    // ── Overlay Toggle Buttons ──
+    this.overlayBtnsContainer = new Container();
+    
+    this.btnVault = this._createBtn('📦 Vault', 100, 36, () => {
+      if (this.onVaultClick) this.onVaultClick();
+    });
+    this.btnPatron = this._createBtn('📜 Orders', 100, 36, () => {
+      if (this.onPatronClick) this.onPatronClick();
+    });
+    
+    this.btnVault.x = -55;
+    this.btnPatron.x = 55;
+    this.overlayBtnsContainer.addChild(this.btnVault);
+    this.overlayBtnsContainer.addChild(this.btnPatron);
+    this.container.addChild(this.overlayBtnsContainer);
 
     // ── Pulverizer ──
     this.pulverizerContainer = new Container();
@@ -52,14 +68,38 @@ export class HUD {
 
     // Subscribe to economy updates
     if (this.economy) {
-      this.economy.onUpdate((dust) => {
-        this.walletText.text = `✨ ${dust}`;
+      this.economy.onUpdate(() => {
+        this.walletText.text = `✨ ${this.economy.dust}  |  👑 ${this.economy.crowns}`;
         this._drawWallet();
         this._updateTabs();
       });
     } else {
       this._updateTabs();
     }
+  }
+
+  _createBtn(label, w, h, onClick) {
+    const btn = new Container();
+    btn.eventMode = 'static';
+    btn.cursor = 'pointer';
+    
+    const bg = new Graphics();
+    bg.roundRect(-w/2, -h/2, w, h, 6).fill(0x3d3228).stroke({ color: 0x251a14, width: 2 });
+    
+    const text = new Text({
+      text: label,
+      style: { fontSize: 14, fill: 0xf0e6d2, fontFamily: 'sans-serif' }
+    });
+    text.anchor.set(0.5);
+    
+    btn.addChild(bg);
+    btn.addChild(text);
+    
+    btn.on('pointerdown', onClick);
+    btn.on('pointerover', () => { bg.clear().roundRect(-w/2, -h/2, w, h, 6).fill(0x4a3f35).stroke({ color: 0x251a14, width: 2 }); });
+    btn.on('pointerout', () => { bg.clear().roundRect(-w/2, -h/2, w, h, 6).fill(0x3d3228).stroke({ color: 0x251a14, width: 2 }); });
+    
+    return btn;
   }
 
   _createTab(label, index) {
@@ -142,9 +182,13 @@ export class HUD {
     this.walletContainer.y = Math.max(20, screenHeight * 0.05);
     this._drawWallet();
 
-    // Tabs below wallet
+    // Overlay buttons below wallet
+    this.overlayBtnsContainer.x = cx;
+    this.overlayBtnsContainer.y = this.walletContainer.y + 40;
+
+    // Tabs below overlay buttons
     this.tabContainer.x = cx;
-    this.tabContainer.y = this.walletContainer.y + 40;
+    this.tabContainer.y = this.overlayBtnsContainer.y + 45;
     this.tabHerbalist.x = -80;
     this.tabMortar.x = 80;
 

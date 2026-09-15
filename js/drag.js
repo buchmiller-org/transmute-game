@@ -17,15 +17,17 @@ const HL = {
 };
 
 export class DragController {
-  constructor({ app, boards, cart, hud, economy }) {
+  constructor({ app, boards, cart, vault, patron, hud, economy }) {
     this.app = app;
     this.boards = boards;
     this.cart = cart;
+    this.vault = vault;
+    this.patron = patron;
     this.hud = hud;
     this.economy = economy;
 
     this.state = 'IDLE';
-    this.source = null; // { containerType: 'board'|'cart', obj: Board|Cart, idx: number }
+    this.source = null; // { containerType: 'board'|'cart'|'vault'|'patron', obj: Board|Cart|Vault|PatronOrders, idx: number }
     this.sourceItem = null;
     this.dragAvatar = null;
     this.startPos = null;
@@ -44,6 +46,16 @@ export class DragController {
     this.cart.tiles.forEach(tile => {
       tile.container.on('pointerdown', (e) => this._onDown(e, 'cart', this.cart, tile.container.cartIndex));
     });
+
+    if (this.vault) {
+      this.vault.tiles.forEach(tile => {
+        tile.container.on('pointerdown', (e) => this._onDown(e, 'vault', this.vault, tile.container.vaultIndex));
+      });
+    }
+
+    if (this.patron) {
+      this.patron.onSlotDown = (e, idx) => this._onDown(e, 'patron', this.patron, idx);
+    }
 
     if (this.hud) {
       this.hud.pulverizerContainer.on('pointerdown', () => this._onPulverizerDown());
@@ -87,6 +99,11 @@ export class DragController {
       }
       if (state !== TILE_STATE.ACTIVE) return;
     } else if (type === 'cart') {
+      if (!obj.isSlotActive(idx)) {
+        obj.unlockSlot(idx);
+        return;
+      }
+    } else if (type === 'vault') {
       if (!obj.isSlotActive(idx)) {
         obj.unlockSlot(idx);
         return;
@@ -147,15 +164,26 @@ export class DragController {
   _clearHighlights() {
     this.boards.forEach(b => b.clearAllHighlights());
     for(let i=0; i<this.cart.maxSlots; i++) this.cart.setHighlight(i, false);
+    if (this.vault) for(let i=0; i<this.vault.maxTotalSlots; i++) this.vault.setHighlight(i, false);
+    if (this.patron) for(let i=0; i<this.patron.slots.length; i++) this.patron.setHighlight(i, false);
   }
 
   _beginDrag(event) {
     this.state = 'DRAGGING';
     this._clearSelection();
 
-    const srcTile = this.source.obj.tiles[this.source.idx];
-    srcTile.itemText.alpha = 0.3;
-    srcTile.tierText.alpha = 0.3;
+    let srcTile = null;
+    if (this.source.containerType === 'patron') {
+      const map = this.patron.slots[this.source.idx];
+      srcTile = this.patron.rowUIs[map.orderIdx].tiles[map.reqIdx];
+    } else {
+      srcTile = this.source.obj.tiles[this.source.idx];
+    }
+
+    if (srcTile) {
+      srcTile.itemText.alpha = 0.3;
+      if (srcTile.tierText) srcTile.tierText.alpha = 0.3;
+    }
 
     this._createAvatar(event);
   }
@@ -177,7 +205,34 @@ export class DragController {
   }
 
   _getHoverTarget(globalPos) {
-    // Check cart first
+    // Check overlays first since they are on top
+    if (this.patron && this.patron.container.visible) {
+      for (let i = 0; i < this.patron.slots.length; i++) {
+        const map = this.patron.slots[i];
+        const tile = this.patron.rowUIs[map.orderIdx].tiles[map.reqIdx];
+        if (!tile) continue;
+        const local = tile.container.toLocal(globalPos);
+        const half = this.patron.tileSize / 2;
+        if (local.x >= -half && local.x <= half && local.y >= -half && local.y <= half) {
+          return { type: 'patron', obj: this.patron, idx: i };
+        }
+      }
+    }
+
+    if (this.vault && this.vault.container.visible) {
+      for (let i = 0; i < this.vault.maxTotalSlots; i++) {
+        if (!this.vault.isSlotActive(i)) continue;
+        const tile = this.vault.tiles[i];
+        if (!tile) continue;
+        const local = tile.container.toLocal(globalPos);
+        const half = this.vault.tileSize / 2;
+        if (local.x >= -half && local.x <= half && local.y >= -half && local.y <= half) {
+          return { type: 'vault', obj: this.vault, idx: i };
+        }
+      }
+    }
+
+    // Check cart
     if (this.cart.container.visible) {
       const localCart = this.cart.container.toLocal(globalPos);
       if (localCart.y >= 0 && localCart.y <= this.cart.height && localCart.x >= 0 && localCart.x <= this.cart.width) {
@@ -189,13 +244,15 @@ export class DragController {
       }
     }
 
-    // Check visible boards
-    for (const board of this.boards) {
-      if (!board.container.visible) continue;
-      const local = board.container.toLocal(globalPos);
-      const idx = board.getTileAtLocal(local.x, local.y);
-      if (idx >= 0 && board.getTileState(idx) === TILE_STATE.ACTIVE) {
-        return { type: 'board', obj: board, idx };
+    // Check visible boards only if overlays are closed
+    if ((!this.vault || !this.vault.container.visible) && (!this.patron || !this.patron.container.visible)) {
+      for (const board of this.boards) {
+        if (!board.container.visible) continue;
+        const local = board.container.toLocal(globalPos);
+        const idx = board.getTileAtLocal(local.x, local.y);
+        if (idx >= 0 && board.getTileState(idx) === TILE_STATE.ACTIVE) {
+          return { type: 'board', obj: board, idx };
+        }
       }
     }
     return null;
@@ -210,15 +267,33 @@ export class DragController {
     if (target.type === 'cart') {
       const cell = target.obj.getCell(target.idx);
       const isCapstone = this.sourceItem.tier === getMaxTier(this.sourceItem.family);
-      if (!cell && isCapstone) valid = true;
+      if (!cell && (isCapstone || this.source.containerType === 'vault' || this.source.containerType === 'patron')) {
+        valid = true;
+      }
     } else if (target.type === 'board') {
       const board = target.obj;
-      if (board.allowedFamilies.includes(this.sourceItem.family)) {
+      if (board.allowedFamilies.includes(this.sourceItem.family) && this.source.containerType !== 'patron') {
         const cell = board.getCell(target.idx);
         if (!cell) valid = true;
         else if (canMerge(this.sourceItem, cell)) {
           valid = true;
           merge = true;
+        }
+      }
+    } else if (target.type === 'vault') {
+      if (this.source.containerType === 'cart' || this.source.containerType === 'board' || this.source.containerType === 'vault') {
+        const cellData = target.obj.getCellData(target.idx);
+        if (!cellData) {
+          valid = true;
+        } else if (target.obj.canStack(target.idx, this.sourceItem)) {
+          valid = true;
+          merge = true; // Use merge highlight for stacking
+        }
+      }
+    } else if (target.type === 'patron') {
+      if (this.source.containerType === 'cart' || this.source.containerType === 'vault') {
+        if (!target.obj.getCell(target.idx) && target.obj.isAcceptable(target.idx, this.sourceItem)) {
+          valid = true;
         }
       }
     }
@@ -229,7 +304,7 @@ export class DragController {
     if (target.type === 'board') {
       target.obj.setTileHighlight(target.idx, c, a);
     } else {
-      target.obj.setHighlight(target.idx, true); // Cart highlight is binary for now
+      target.obj.setHighlight(target.idx, true);
     }
   }
 
@@ -263,31 +338,80 @@ export class DragController {
     const tgtIdx = target.idx;
     const item = this.sourceItem;
 
+    // Helper to safely extract 1 item from source
+    const extractSource = () => {
+      if (this.source.containerType === 'vault') {
+        const cData = srcObj.getCellData(srcIdx);
+        if (cData && cData.count > 1) {
+          srcObj.addCount(srcIdx, -1);
+        } else {
+          srcObj.clearCell(srcIdx);
+        }
+      } else {
+        srcObj.clearCell(srcIdx);
+      }
+    };
+
     if (target.type === 'cart') {
       const isCapstone = item.tier === getMaxTier(item.family);
       const tgtCell = tgtObj.getCell(tgtIdx);
-      if (!isCapstone || tgtCell) {
+      if ((!isCapstone && this.source.containerType === 'board') || tgtCell) {
         this._showInvalid(target);
         return;
       }
-      srcObj.clearCell(srcIdx);
+      extractSource();
       tgtObj.setCell(tgtIdx, item);
     } else if (target.type === 'board') {
       const board = tgtObj;
-      if (!board.allowedFamilies.includes(item.family)) {
+      if (!board.allowedFamilies.includes(item.family) || this.source.containerType === 'patron') {
         this._showInvalid(target);
         return;
       }
       const tgtCell = board.getCell(tgtIdx);
       if (tgtCell) {
         if (canMerge(item, tgtCell)) {
-          this._executeMergeCross(srcObj, srcIdx, tgtObj, tgtIdx, item, tgtCell);
+          extractSource();
+          // Simulate merge directly inline
+          const newItem = createItem(tgtCell.family, tgtCell.tier + 1);
+          tgtObj.setCell(tgtIdx, newItem);
+          playMergeAnimation(tgtObj, tgtIdx);
+          if (newItem.family === 'flora' && newItem.tier === 4 && this.economy) {
+            this.economy.unlockFloraT4();
+          }
         } else {
           this._showInvalid(target);
         }
       } else {
-        srcObj.clearCell(srcIdx);
+        extractSource();
         tgtObj.setCell(tgtIdx, item);
+      }
+    } else if (target.type === 'vault') {
+      if (this.source.containerType === 'patron') {
+        this._showInvalid(target);
+        return;
+      }
+      const tgtCellData = tgtObj.getCellData(tgtIdx);
+      if (tgtCellData) {
+        if (tgtObj.canStack(tgtIdx, item)) {
+          extractSource();
+          tgtObj.addCount(tgtIdx, 1);
+        } else {
+          this._showInvalid(target);
+        }
+      } else {
+        extractSource();
+        tgtObj.setCell(tgtIdx, item);
+      }
+    } else if (target.type === 'patron') {
+      if (this.source.containerType !== 'cart' && this.source.containerType !== 'vault') {
+        this._showInvalid(target);
+        return;
+      }
+      if (!tgtObj.getCell(tgtIdx) && tgtObj.isAcceptable(tgtIdx, item)) {
+        extractSource();
+        tgtObj.setCell(tgtIdx, item);
+      } else {
+        this._showInvalid(target);
       }
     }
   }
@@ -388,9 +512,17 @@ export class DragController {
 
   _restoreSourceTile() {
     if (this.source) {
-      const t = this.source.obj.tiles[this.source.idx];
-      t.itemText.alpha = 1;
-      if (t.tierText) t.tierText.alpha = 1;
+      let t = null;
+      if (this.source.containerType === 'patron') {
+        const map = this.patron.slots[this.source.idx];
+        t = this.patron.rowUIs[map.orderIdx].tiles[map.reqIdx];
+      } else {
+        t = this.source.obj.tiles[this.source.idx];
+      }
+      if (t) {
+        t.itemText.alpha = 1;
+        if (t.tierText) t.tierText.alpha = 1;
+      }
     }
   }
 

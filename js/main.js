@@ -9,6 +9,8 @@ import { DragController } from './drag.js';
 import { Economy } from './economy.js';
 import { HUD } from './hud.js';
 import { Cart } from './cart.js';
+import { Vault } from './vault.js';
+import { PatronOrders } from './patron.js';
 import { updateAnimations } from './animations.js';
 
 async function init() {
@@ -34,24 +36,41 @@ async function init() {
   app.stage.addChild(board2.container);
 
   const cart = new Cart({ economy, maxSlots: 5, tileSize, gap: GAP });
-  app.stage.addChild(cart.container);
+
+  const vault = new Vault({ app, economy, cart });
+  const patron = new PatronOrders({ app, economy });
 
   const hud = new HUD({ app, economy });
-  app.stage.addChild(hud.container);
+  hud.onVaultClick = () => {
+    if (vault.container.visible) vault.hide();
+    else { patron.hide(); vault.show(); }
+  };
+  hud.onPatronClick = () => {
+    if (patron.container.visible) patron.hide();
+    else { vault.hide(); patron.show(); }
+  };
 
   // ───── Spawners ─────
-  const floraSpawner = new Spawner({ board: board1, familyId: 'flora', emoji: '🌱', label: 'Plant Seed', buttonWidth: 140 });
-  const fungiSpawner = new Spawner({ board: board1, familyId: 'fungi', emoji: '🍄', label: 'Spore Log', buttonWidth: 140 });
+  const floraSpawner = new Spawner({ board: board1, familyId: 'flora', emoji: '🌱', label: 'Plant Seed', buttonWidth: 170 });
+  const fungiSpawner = new Spawner({ board: board1, familyId: 'fungi', emoji: '🍄', label: 'Spore Log', buttonWidth: 170 });
   app.stage.addChild(floraSpawner.container);
   app.stage.addChild(fungiSpawner.container);
 
-  const saltSpawner = new Spawner({ board: board2, familyId: 'salts', emoji: '🧂', label: 'Salt Grinder', buttonWidth: 140 });
-  const pigmentSpawner = new Spawner({ board: board2, familyId: 'pigments', emoji: '🤍', label: 'Pigment Mortar', buttonWidth: 140 });
+  const saltSpawner = new Spawner({ board: board2, familyId: 'salts', emoji: '🧂', label: 'Salt Grinder', buttonWidth: 170 });
+  const pigmentSpawner = new Spawner({ board: board2, familyId: 'pigments', emoji: '🤍', label: 'Pigment Mortar', buttonWidth: 170 });
   app.stage.addChild(saltSpawner.container);
   app.stage.addChild(pigmentSpawner.container);
 
+  // Overlays
+  app.stage.addChild(vault.container);
+  app.stage.addChild(patron.container);
+
+  // Cart and HUD should be on top of the overlays so they remain interactive
+  app.stage.addChild(cart.container);
+  app.stage.addChild(hud.container);
+
   // ───── Drag Controller ─────
-  new DragController({ app, boards: [board1, board2], cart, hud, economy });
+  new DragController({ app, boards: [board1, board2], cart, vault, patron, hud, economy });
 
   hud.onTabChange = () => layout();
 
@@ -109,6 +128,8 @@ async function init() {
       lastW = app.screen.width;
       lastH = app.screen.height;
       layout();
+      if (vault.container.visible) vault.layout(lastW, lastH);
+      if (patron.container.visible) patron.layout(lastW, lastH);
     }
   });
 
